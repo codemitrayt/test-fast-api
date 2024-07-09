@@ -1,2 +1,4 @@
 fastapi
 uvicorn
+pymongo[srv]==3.11
+pymongo==3.11
