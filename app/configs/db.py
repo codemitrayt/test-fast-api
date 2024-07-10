@@ -6,3 +6,4 @@ client = MongoClient(uri, ssl_ca_certs=certifi.where())
 
 db = client.todo_db
 collection_name = db['todo_collection']
+user_collection = db['users']
