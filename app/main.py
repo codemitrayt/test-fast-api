@@ -1,11 +1,17 @@
-from fastapi import FastAPI, HTTPException
-from .models import Todo, SignUp
-from .configs.db import collection_name, user_collection
-from .schema import list_serial
-from bson import ObjectId
 import bcrypt
+import json
+from jose import jws
+from bson import ObjectId
+from .schema import list_serial, individual_serial_user
+from .models import Todo, SignUp, Token, Login
+from fastapi import FastAPI, HTTPException
+from .configs.db import collection_name, user_collection
 
 app = FastAPI()
+
+SECRET_KEY = "thisisjwtsecretkey"
+ALGORITHM = "HS256"
+TOKEN_EXPIRE_DAYS = 15
 
 # Hash a password using bcrypt
 def get_password_hash(password):
@@ -40,17 +46,79 @@ async def update_todo(id: str, todo : Todo):
 @app.delete('/todos/{id}')
 async def delete_todo(id: str):
     collection_name.find_one_and_delete({"_id" : ObjectId(id)})
+    
+    
+def create_jwt_token(payload : dict):
+    to_encode = payload.copy()
+    jwt_token = jws.sign(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt_token
+
+def verify_jwt_token(token):
+    return jws.verify(token, SECRET_KEY, algorithms=ALGORITHM)
 
 
-@app.post('/auth/signup')
+@app.post('/auth/sign-up')
 async def signup(request : SignUp):
     user = user_collection.find_one({'email' : dict(request).get('email')})
     if user:
         raise HTTPException(status_code=400, detail='Email already exists')
     
-    if dict(request).get('password') != dict(request).get('confirm_password'):
-        raise HTTPException(status_code=400, detail='Passwords do not match')
+    if dict(request).get('password') != dict(request).get('confirmPassword'):
+        raise HTTPException(status_code=400, detail='Passwords does not match')
+
+    # Add exp time
+    jwt_token = create_jwt_token(dict(request))
+
+    # Send virification link to user email address
+
+    return {'jwt_token': jwt_token}
+
+@app.post('/auth/verify-email')
+async def verify_email(request : Token):
+    try:
+        token_user = verify_jwt_token(dict(request).get('token'))
+        user = json.loads(token_user)
     
-    hash_password = get_password_hash(dict(request).get('password'))
+        exist = user_collection.find_one({'email' : dict(user).get('email')})
+        if exist:
+            return HTTPException(status_code=400, detail='Email already exists')
+
+        hash_password = get_password_hash(dict(user).get('password'))
+        user_collection.insert_one({'email' : dict(user).get('email'), 'password' : hash_password, 'fullName' : dict(user).get('fullName')})
+      
+        jwt_token = create_jwt_token({'email' : dict(user).get('email')})
+
+        return {'jwt_token': jwt_token, 'user': {'email': dict(user).get('email'), 'fullName': dict(user).get('fullName')}}
     
-    return {'message': 'User signed up successfully'}
+    except Exception as e:
+        return HTTPException(status_code=400, detail='Invalid token')
+
+
+@app.post('/auth/self')
+async def get_user_info(request : Token):
+    try:
+        token_user = verify_jwt_token(dict(request).get('token'))
+        user = json.loads(token_user)
+
+        user_info = user_collection.find_one({'email' : dict(user).get('email')})
+        if not user_info:
+            raise HTTPException(status_code=401, detail='User not found')
+
+        return {'user': individual_serial_user(user_info)}
+
+    except Exception as e:
+        return HTTPException(status_code=401, detail='Invalid token')
+    
+
+@app.post('/auth/login')
+async def login(request : Login):
+    user = user_collection.find_one({'email' : dict(request).get('email')})
+    if not user:
+        raise HTTPException(status_code=400, detail='Invalid email or password')
+    
+    if not verify_password(dict(request).get('password'), user['password']):
+        raise HTTPException(status_code=400, detail='Invalid email or password')
+    
+    token = create_jwt_token({'email' : dict(request).get('email')})
+    
+    return {'jwt_token': token, "user" : {'email' : user['email'], 'fullName' : user['fullName']}}
