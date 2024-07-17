@@ -6,8 +6,15 @@ class Todo(BaseModel):
     isCompleted : bool
     
 class SignUp(BaseModel):
-    first_name : str
-    last_name : str
+    fullName : str
     email : str
     password : str
-    confirm_password :  str
+    confirmPassword : str
+
+
+class Token(BaseModel):
+    token : str
+    
+class Login(BaseModel):
+    email: str
+    password : str
