@@ -1,7 +1,9 @@
 import bcrypt
 import json
+import time
 from jose import jws
 from bson import ObjectId
+from datetime import datetime, timedelta, timezone
 from .schema import list_serial, individual_serial_user
 from .models import Todo, SignUp, Token, Login
 from fastapi import FastAPI, HTTPException
@@ -59,6 +61,7 @@ def verify_jwt_token(token):
 
 @app.post('/auth/sign-up')
 async def signup(request : SignUp):
+    data = dict(request).copy()
     user = user_collection.find_one({'email' : dict(request).get('email')})
     if user:
         raise HTTPException(status_code=400, detail='Email already exists')
@@ -66,12 +69,14 @@ async def signup(request : SignUp):
     if dict(request).get('password') != dict(request).get('confirmPassword'):
         raise HTTPException(status_code=400, detail='Passwords does not match')
 
-    # Add exp time
-    jwt_token = create_jwt_token(dict(request))
+    dt = datetime.now(tz=timezone.utc) + timedelta(minutes=5)
+    exp = time.mktime(dt.timetuple())
+    data.update({'exp': exp})
+    jwt_token = create_jwt_token(data)
 
     # Send virification link to user email address
 
-    return {'jwt_token': jwt_token}
+    return {'token': jwt_token}
 
 @app.post('/auth/verify-email')
 async def verify_email(request : Token):
@@ -86,7 +91,10 @@ async def verify_email(request : Token):
         hash_password = get_password_hash(dict(user).get('password'))
         user_collection.insert_one({'email' : dict(user).get('email'), 'password' : hash_password, 'fullName' : dict(user).get('fullName')})
       
-        jwt_token = create_jwt_token({'email' : dict(user).get('email')})
+        dt = datetime.now(tz=timezone.utc) + timedelta(days=30)
+        exp = time.mktime(dt.timetuple())
+        jwt_token = create_jwt_token({'email' : dict(user).get('email'), 'exp' : exp})
+        print(jwt_token) 
 
         return {'jwt_token': jwt_token, 'user': {'email': dict(user).get('email'), 'fullName': dict(user).get('fullName')}}
     
@@ -119,6 +127,8 @@ async def login(request : Login):
     if not verify_password(dict(request).get('password'), user['password']):
         raise HTTPException(status_code=400, detail='Invalid email or password')
     
-    token = create_jwt_token({'email' : dict(request).get('email')})
+    dt = datetime.now(tz=timezone.utc) + timedelta(days=30)
+    exp = time.mktime(dt.timetuple())
+    token = create_jwt_token({'email' : dict(request).get('email'), 'exp' : exp})
     
     return {'jwt_token': token, "user" : {'email' : user['email'], 'fullName' : user['fullName']}}
