@@ -1,8 +1,11 @@
 import bcrypt
 import json
 import time
+import smtplib
 from jose import jws
 from bson import ObjectId
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from datetime import datetime, timedelta, timezone
 from .schema import list_serial, individual_serial_user
 from .models import Todo, SignUp, Token, Login
@@ -74,9 +77,20 @@ async def signup(request : SignUp):
     data.update({'exp': exp})
     jwt_token = create_jwt_token(data)
 
-    # Send virification link to user email address
+    verification_link = f"https://workable-ai-official.vercel.app/auth/verify-email?token={jwt_token}"  # Construct the verification link
+    msg = MIMEMultipart()
+    msg['From'] = 'themailbot0@gmail.com'
+    msg['To'] = data.get('email')
+    msg['Subject'] = 'Verify Your Email'
+    msg.attach(MIMEText(f'Please click on the link to verify your email: {verification_link}', 'plain'))
 
-    return {'token': jwt_token}
+    server = smtplib.SMTP('smtp.gmail.com: 587')
+    server.starttls()
+    server.login(msg['From'], 'ookogfiezrelknno')
+    server.send_message(msg)
+    server.quit()
+
+    return {'message' : "Verify link sent successfully", "ok" : True}
 
 @app.post('/auth/verify-email')
 async def verify_email(request : Token):
