@@ -11,12 +11,23 @@ from .schema import list_serial, individual_serial_user
 from .models import Todo, SignUp, Token, Login
 from fastapi import FastAPI, HTTPException
 from .configs.db import collection_name, user_collection
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
 SECRET_KEY = "thisisjwtsecretkey"
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_DAYS = 15
+
+origins = ["*"]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Hash a password using bcrypt
 def get_password_hash(password):
